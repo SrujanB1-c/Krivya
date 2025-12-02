@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>krivya - AI Farming Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <!-- Library to parse Markdown -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        html, body {
+            overscroll-behavior-y: contain;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .nav-item.active {
+            color: #16a34a; /* Green-600 */
+        }
+        .nav-item.active svg {
+             color: #16a34a;
+        }
+        .modal-backdrop { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease, opacity 0.3s ease; }
+        .typing-indicator span {
+            height: 8px; width: 8px; background-color: #94a3b8; border-radius: 50%; display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+        /* Pulse animation for microphone */
+        .mic-active {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+        }
+        /* Custom styles for AI-generated content */
+        .prose-ai ul { list-style-type: disc; padding-left: 1.5rem; }
+        .prose-ai li { margin-bottom: 0.5rem; }
+        .prose-ai p { margin-bottom: 0.5rem; }
+        .prose-ai strong { color: #15803d; } /* green-700 */
+        .system-message {
+            text-align: center;
+            font-size: 0.8rem;
+            color: #64748b; /* slate-500 */
+            padding: 0.5rem;
+            margin: 0.5rem auto;
+            max-width: 90%;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <!-- Login View -->
+    <div id="login-view" class="max-w-md mx-auto min-h-screen bg-white flex flex-col items-center justify-center p-8">
+        <img src="https://placehold.co/100x100/22c55e/ffffff?text=K" alt="krivya Logo" class="rounded-full mb-6">
+        <h1 class="text-3xl font-bold text-green-700 mb-2" data-i18n-key="welcome_to_krivya">Welcome to krivya</h1>
+        <p class="text-slate-500 mb-8" data-i18n-key="app_subtitle">Your Hyper-Local Farming Partner</p>
+        
+        <div class="w-full">
+            <label for="name-input" class="block text-sm font-medium text-slate-700" data-i18n-key="enter_name_label">Enter Your Name</label>
+            <input type="text" id="name-input" class="mt-1 block w-full px-4 py-3 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" data-i18n-placeholder="enter_name_placeholder" placeholder="e.g., Bhavesh Patel">
+        </div>
+
+        <button id="login-btn" class="mt-6 w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition">
+            <span data-i18n-key="login_btn">Login</span>
+        </button>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app-container" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl flex-col hidden">
+
+        <!-- Header -->
+        <header class="bg-white p-4 flex justify-between items-center sticky top-0 z-10 border-b">
+            <div class="flex items-center space-x-3">
+                 <img src="https://placehold.co/40x40/22c55e/ffffff?text=K" alt="krivya Logo" class="rounded-full">
+                <div>
+                    <h1 class="text-lg font-bold text-green-700">krivya</h1>
+                    <p class="text-xs text-slate-500" data-i18n-key="app_subtitle">Your Hyper-Local Farming Partner</p>
+                </div>
+            </div>
+             <!-- Offline Mode Toggle -->
+            <div class="flex items-center space-x-2">
+                <span class="text-xs font-medium text-slate-500" data-i18n-key="offline_mode">Offline</span>
+                <input type="checkbox" id="offline-toggle" class="hidden"/>
+                <label for="offline-toggle" class="w-10 h-5 bg-slate-300 rounded-full flex items-center p-1 cursor-pointer transition-colors duration-300">
+                    <div class="w-3 h-3 bg-white rounded-full shadow-md transform transition-transform duration-300"></div>
+                </label>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow p-4 pb-24 overflow-y-auto">
+            <!-- Dashboard View -->
+            <div id="dashboard-view">
+                <div class="mb-4">
+                    <h2 id="welcome-message-header" class="text-xl font-semibold"></h2>
+                    <p id="location-display" class="text-slate-500" data-i18n-key="location_detecting">Detecting location...</p>
+                </div>
+                
+                 <!-- Disease Diagnosis Card -->
+                <div class="bg-white rounded-xl shadow p-4 mb-6 border">
+                    <h3 class="font-semibold mb-2 flex items-center"><i data-lucide="scan-line" class="w-5 h-5 mr-2 text-green-600"></i><span data-i18n-key="diagnosis_title">Diagnose Crop Disease</span></h3>
+                    <p class="text-slate-500 text-sm mb-4" data-i18n-key="diagnosis_subtitle">Upload a photo of a plant leaf to get an instant AI-powered diagnosis and treatment plan.</p>
+                    <button id="upload-photo-btn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition flex items-center justify-center space-x-2">
+                        <i data-lucide="camera" class="w-5 h-5"></i>
+                        <span data-i18n-key="upload_photo_btn">Upload Photo</span>
+                    </button>
+                </div>
+                
+                <!-- Today's Plan -->
+                <div id="todays-plan" class="bg-gradient-to-br from-green-600 to-green-800 text-white p-5 rounded-xl mb-6 shadow-lg">
+                     <h3 class="text-lg font-bold mb-2 flex items-center"><i data-lucide="sparkles" class="w-5 h-5 mr-2"></i><span data-i18n-key="todays_plan_title">AI-Generated Today's Plan</span></h3>
+                     <div id="plan-content">
+                         <p class="text-sm opacity-90 mb-4" data-i18n-key="todays_plan_prompt">Tap below to get a synthesized action plan for today based on real-time data.</p>
+                     </div>
+                     <button id="generate-plan-btn" class="w-full bg-white/20 text-white font-bold py-3 px-4 rounded-lg hover:bg-white/30 transition flex items-center justify-center space-x-2 mt-4">
+                         <span data-i18n-key="generate_plan_btn">✨ Generate Today's Plan</span>
+                     </button>
+                </div>
+
+                <!-- Data Cards -->
+                 <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-left">
+                        <p class="text-sm font-semibold text-slate-600" data-i18n-key="weather_card_title">Weather</p>
+                        <p id="weather-value" class="font-bold text-2xl">--</p>
+                        <p id="weather-condition-text" class="text-xs text-slate-500">--</p>
+                    </div>
+                    <div class="bg-cyan-50 border border-cyan-200 p-3 rounded-lg text-left">
+                         <p class="text-sm font-semibold text-slate-600" data-i18n-key="humidity_card_title">Humidity</p>
+                         <p id="humidity-value" class="font-bold text-2xl">--</p>
+                         <p id="humidity-condition-text" class="text-xs text-slate-500" data-i18n-key="humidity_moderate">--</p>
+                    </div>
+                    <div class="bg-orange-50 border border-orange-200 p-3 rounded-lg text-left">
+                         <p id="market-crop-name" class="text-sm font-semibold text-slate-600" data-i18n-key="market_price_card_title">-- Price</p>
+                         <p id="market-value" class="font-bold text-2xl">--</p>
+                         <p id="market-trend-text" class="text-xs text-green-600 font-semibold">--</p>
+                    </div>
+                     <div id="soil-card" class="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-left cursor-pointer hover:border-yellow-400 transition">
+                         <p class="text-sm font-semibold text-slate-600" data-i18n-key="soil_card_title">Soil Health</p>
+                         <p class="font-bold text-lg" id="soil-type" data-i18n-key="soil_loading">Loading...</p>
+                         <p class="text-xs text-slate-500" data-i18n-key="tap_for_details">Tap for details</p>
+                    </div>
+                </div>
+
+                <!-- 7-Day Weather Forecast -->
+                <div class="mb-6">
+                    <h3 class="font-semibold mb-3 flex items-center" data-i18n-key="forecast_title">7-Day Forecast</h3>
+                    <div id="forecast-container" class="grid grid-cols-7 gap-2 text-center">
+                        <!-- Forecast items will be injected here by JS -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Chat View -->
+            <div id="chat-view" class="hidden h-full flex flex-col">
+                <div id="chat-messages" class="flex-grow space-y-4 overflow-y-auto pr-2">
+                    <!-- Chat messages will be loaded here -->
+                </div>
+                
+                <div class="mt-auto bg-white py-2 flex items-center space-x-2">
+                    <input type="text" id="chat-input" data-i18n-placeholder="chat_placeholder" placeholder="Type or speak..." class="w-full border-slate-300 rounded-full py-2 px-4 focus:ring-green-500 focus:border-green-500 transition">
+                    <button id="mic-btn" class="bg-green-600 text-white rounded-full p-3 hover:bg-green-700 focus:outline-none transition shrink-0">
+                        <i data-lucide="mic"></i>
+                    </button>
+                    <button id="send-btn" class="bg-green-600 text-white rounded-full p-3 hover:bg-green-700 focus:outline-none transition shrink-0">
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Market View -->
+            <div id="market-view" class="hidden">
+                <h2 class="text-xl font-semibold mb-1" data-i18n-key="market_title">Local Mandi Prices</h2>
+                <p id="market-location" class="text-slate-500 mb-4"></p>
+                
+                <!-- Search Bar -->
+                <div class="mb-4 flex space-x-2">
+                    <input type="search" id="market-search-input" data-i18n-placeholder="market_search_placeholder" placeholder="Search for a crop..." class="w-full border-slate-300 rounded-full py-2 px-4 focus:ring-green-500 focus:border-green-500 transition">
+                    <button id="market-search-btn" class="bg-green-600 text-white rounded-full p-3 hover:bg-green-700 focus:outline-none transition shrink-0">
+                        <i data-lucide="search"></i>
+                    </button>
+                </div>
+
+                <!-- Main Market List -->
+                <div id="market-list-container">
+                    <div id="market-data-container" class="space-y-3">
+                        <!-- Market data will be injected here -->
+                    </div>
+                </div>
+
+                <!-- Detailed Search Result View -->
+                <div id="market-search-result-container" class="hidden">
+                     <!-- Detailed search result will be injected here -->
+                     <button id="back-to-market-list-btn" class="mt-4 w-full text-slate-600 font-semibold py-2 px-4 rounded-lg hover:bg-slate-200 transition flex items-center justify-center space-x-2">
+                        <i data-lucide="arrow-left"></i>
+                        <span data-i18n-key="back_to_list">Back to Full List</span>
+                    </button>
+                </div>
+            </div>
+            
+             <!-- Analysis View -->
+            <div id="analysis-view" class="hidden">
+                 <h2 class="text-xl font-semibold mb-4" data-i18n-key="analysis_title">Farm Analysis</h2>
+                 <div class="space-y-6">
+                    <div class="bg-white rounded-xl shadow p-4">
+                        <h3 class="font-semibold mb-2 flex items-center"><i data-lucide="trending-up" class="w-5 h-5 mr-2 text-blue-600"></i><span data-i18n-key="yield_analysis_title">Yield Analysis</span></h3>
+                        <p class="text-slate-500 text-sm mb-4" data-i18n-key="yield_analysis_subtitle">Calculate and record your farm's potential yield.</p>
+                        <div class="space-y-4 mt-4">
+                            <div>
+                                <label for="farm-area-input" class="block text-sm font-medium text-slate-700" data-i18n-key="farm_area_label">Farm Area (in acres)</label>
+                                <input type="number" id="farm-area-input" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="e.g., 5">
+                            </div>
+                            <div>
+                                <label for="crop-name-input" class="block text-sm font-medium text-slate-700" data-i18n-key="crop_planted_label">Current Crop Planted</label>
+                                <input type="text" id="crop-name-input" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="e.g., Wheat">
+                            </div>
+                            <button id="calculate-yield-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition flex items-center justify-center space-x-2">
+                                <span data-i18n-key="calculate_yield_btn">Calculate & Record Yield</span>
+                            </button>
+                        </div>
+                        <div id="yield-results" class="mt-4"></div>
+                    </div>
+
+                    <div id="yield-history-section">
+                        <h3 class="text-lg font-semibold mb-2" data-i18n-key="yield_history_title">Yield History</h3>
+                        <div id="yield-history-list" class="space-y-3">
+                            <!-- History items will be injected here -->
+                        </div>
+                    </div>
+                 </div>
+            </div>
+
+            <!-- Profile View -->
+            <div id="profile-view" class="hidden">
+                 <h2 class="text-xl font-semibold mb-4" data-i18n-key="profile_title">Profile & Settings</h2>
+                 <div class="space-y-4">
+                    <div class="bg-gradient-to-r from-green-100 to-blue-100 p-4 rounded-lg flex items-center space-x-4">
+                        <div id="profile-initial-circle" class="w-16 h-16 rounded-full bg-green-500 text-white flex items-center justify-center text-3xl font-bold"></div>
+                        <div>
+                            <p id="profile-name" class="font-bold text-lg"></p>
+                            <p id="profile-farm-name" class="text-sm text-slate-600" data-i18n-key="farm_name_placeholder">Your Farm Name</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                         <button id="farm-details-btn" class="w-full text-left bg-slate-50 hover:bg-slate-100 p-4 rounded-lg flex justify-between items-center transition">
+                            <span class="font-semibold flex items-center"><i data-lucide="tractor" class="w-5 h-5 mr-3"></i><span data-i18n-key="farm_details">My Farm Details</span></span>
+                            <i data-lucide="chevron-right" class="text-slate-400"></i>
+                        </button>
+                         <button id="language-btn" class="w-full text-left bg-slate-50 hover:bg-slate-100 p-4 rounded-lg flex justify-between items-center transition">
+                            <span class="font-semibold flex items-center"><i data-lucide="languages" class="w-5 h-5 mr-3"></i><span data-i18n-key="language">Language</span></span>
+                            <i data-lucide="chevron-right" class="text-slate-400"></i>
+                        </button>
+                         <button id="notifications-btn" class="w-full text-left bg-slate-50 hover:bg-slate-100 p-4 rounded-lg flex justify-between items-center transition">
+                            <span class="font-semibold flex items-center"><i data-lucide="bell" class="w-5 h-5 mr-3"></i><span data-i18n-key="notifications">Notifications</span></span>
+                            <i data-lucide="chevron-right" class="text-slate-400"></i>
+                        </button>
+                    </div>
+                     <button id="logout-btn" class="w-full text-left text-red-600 bg-red-50 hover:bg-red-100 font-semibold p-4 rounded-lg flex items-center space-x-3 transition mt-6">
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                        <span data-i18n-key="logout">Logout</span>
+                    </button>
+                 </div>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-slate-200 flex justify-around p-2">
+            <button class="nav-item active flex-1 flex flex-col items-center justify-center p-2" data-view="dashboard"><i data-lucide="layout-dashboard"></i><span class="text-xs font-medium" data-i18n-key="nav_home">Home</span></button>
+            <button class="nav-item flex-1 flex flex-col items-center justify-center p-2 text-slate-500" data-view="chat"><i data-lucide="message-circle"></i><span class="text-xs font-medium" data-i18n-key="nav_assistant">Assistant</span></button>
+            <button class="nav-item flex-1 flex flex-col items-center justify-center p-2 text-slate-500" data-view="market"><i data-lucide="store"></i><span class="text-xs font-medium" data-i18n-key="nav_market">Market</span></button>
+            <button class="nav-item flex-1 flex flex-col items-center justify-center p-2 text-slate-500" data-view="analysis"><i data-lucide="bar-chart-3"></i><span class="text-xs font-medium" data-i18n-key="nav_analysis">Analysis</span></button>
+            <button class="nav-item flex-1 flex flex-col items-center justify-center p-2 text-slate-500" data-view="profile"><i data-lucide="user-circle"></i><span class="text-xs font-medium" data-i18n-key="nav_profile">Profile</span></button>
+        </nav>
+    </div>
+    
+    <!-- Hidden file input for image uploads -->
+    <input type="file" id="image-upload-input" class="hidden" accept="image/*">
+
+    <!-- Modals -->
+    <div id="language-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 modal-backdrop hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 modal-content opacity-0 scale-95">
+            <h3 class="text-lg font-semibold mb-4" data-i18n-key="select_language">Select Language</h3>
+            <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="en">English</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="hi">हिन्दी (Hindi)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="kn">ಕನ್ನಡ (Kannada)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="or">ଓଡ଼ିଆ (Odia)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="mr">मराठी (Marathi)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="gu">ગુજરાતી (Gujarati)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="pa">ਪੰਜਾਬੀ (Punjabi)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="ml">മലയാളം (Malayalam)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="ta">தமிழ் (Tamil)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="te">తెలుగు (Telugu)</button>
+                <button class="lang-option-btn w-full text-left bg-slate-100 hover:bg-slate-200 p-3 rounded-lg font-semibold" data-lang="bn">বাংলা (Bengali)</button>
+            </div>
+             <button class="modal-close-btn mt-6 bg-slate-200 text-slate-800 font-bold py-2 px-6 rounded-lg w-full" data-i18n-key="cancel">Cancel</button>
+        </div>
+    </div>
+    <div id="soil-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 modal-backdrop hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 modal-content opacity-0 scale-95">
+            <h3 class="text-lg font-semibold mb-4" data-i18n-key="detailed_soil_report">Detailed Soil Report</h3>
+            <div id="soil-details-content" class="space-y-3 text-slate-600"></div>
+            <button class="modal-close-btn mt-6 bg-slate-200 text-slate-800 font-bold py-2 px-6 rounded-lg w-full" data-i18n-key="close_btn">Close</button>
+        </div>
+    </div>
+     <div id="alert-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 modal-backdrop hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 modal-content opacity-0 scale-95">
+            <h3 id="alert-title" class="text-lg font-semibold mb-4"></h3>
+            <p id="alert-message" class="text-slate-600"></p>
+            <button class="modal-close-btn mt-6 bg-green-600 text-white font-bold py-2 px-6 rounded-lg w-full" data-i18n-key="ok_btn">OK</button>
+        </div>
+    </div>
+    <div id="location-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 modal-backdrop hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 modal-content opacity-0 scale-95">
+            <h3 class="text-lg font-semibold mb-4" data-i18n-key="location_permission_title">Location Access</h3>
+            <p class="text-slate-600 mb-6" data-i18n-key="location_permission_message">To provide hyper-local weather, soil data, and crop recommendations, krivya needs access to your location.</p>
+            <div class="flex space-x-2">
+                <button id="deny-location-btn" class="w-full bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg" data-i18n-key="deny_btn">Deny</button>
+                <button id="allow-location-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg" data-i18n-key="allow_btn">Allow</button>
+            </div>
+        </div>
+    </div>
+    <!-- Farm Details Modal -->
+    <div id="farm-details-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 modal-backdrop hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 modal-content opacity-0 scale-95">
+            <h3 class="text-lg font-semibold mb-4" data-i18n-key="farm_details">My Farm Details</h3>
+            <div class="space-y-4">
+                <div>
+                    <label for="farm-name-input-profile" class="block text-sm font-medium text-slate-700" data-i18n-key="farm_name_label">Farm Name</label>
+                    <input type="text" id="farm-name-input-profile" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="e.g., Patel Fields">
+                </div>
+                <div>
+                    <label for="farm-area-input-profile" class="block text-sm font-medium text-slate-700" data-i18n-key="farm_area_profile_label">Total Farm Area (in acres)</label>
+                    <input type="number" id="farm-area-input-profile" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="e.g., 15">
+                </div>
+            </div>
+            <div class="mt-6 flex space-x-2">
+                 <button class="modal-close-btn w-full bg-slate-200 text-slate-800 font-bold py-2 px-4 rounded-lg" data-i18n-key="cancel">Cancel</button>
+                 <button id="save-farm-details-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition" data-i18n-key="save_details_btn">Save Details</button>
+            </div>
+        </div>
+    </div>
+    <!-- Diagnosis Modal -->
+     <div id="diagnosis-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 modal-backdrop hidden opacity-0">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 modal-content opacity-0 scale-95">
+            <h3 class="text-lg font-semibold mb-4" data-i18n-key="diagnosis_report_title">Disease Diagnosis Report</h3>
+            <img id="diagnosis-image-preview" src="" alt="Uploaded plant image" class="rounded-lg mb-4 max-h-48 w-full object-cover">
+            <div id="diagnosis-details-content" class="space-y-3 text-slate-600 max-h-[40vh] overflow-y-auto pr-2"></div>
+            <button id="get-diagnosis-btn" class="mt-4 w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition flex items-center justify-center space-x-2">
+                <span data-i18n-key="get_diagnosis_btn">Get Diagnosis</span>
+            </button>
+            <button class="modal-close-btn mt-2 bg-slate-200 text-slate-800 font-bold py-2 px-6 rounded-lg w-full" data-i18n-key="close_btn">Close</button>
+        </div>
+    </div>
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        lucide.createIcons();
+        
+        const englishTranslations = { 
+            'welcome_to_krivya': 'Welcome to krivya', 'app_subtitle': 'Your Hyper-Local Farming Partner', 'offline_mode': 'Offline', 
+            'welcome_message': 'Welcome, %NAME%!', 'todays_plan_title': "AI-Generated Today's Plan", 
+            'todays_plan_prompt': 'Tap below to get a synthesized action plan for today based on real-time data.', 
+            'generate_plan_btn': "✨ Generate Today's Plan", 'weather_card_title': 'Weather', 'humidity_card_title': 'Humidity', 
+            'market_price_card_title': 'Wheat Price', 'soil_card_title': 'Soil Health', 'tap_for_details': 'Tap for details', 
+            'chat_welcome': 'Hello! Ask me a question about your farm.', 'chat_placeholder': 'Type or speak...', 
+            'analysis_title': 'Farm Analysis',
+            'yield_title': 'Yield Analysis', 'yield_subtitle': 'Comparison of your predicted yield vs. previous seasons.', 
+            'profile_title': 'Profile & Settings', 'farm_details': 'My Farm Details', 'language': 'Language', 'notifications': 'Notifications', 
+            'logout': 'Logout', 'nav_home': 'Home', 'nav_assistant': 'Assistant', 'nav_analysis': 'Analysis', 'nav_profile': 'Profile', 
+            'nav_market': 'Market', 'market_title': 'Local Mandi Prices',
+            'select_language': 'Select Language', 'cancel': 'Cancel', 
+            'mic_permission_denied': '🎤 Microphone access was denied. To use the voice feature, please allow microphone access in your browser\'s site settings.', 
+            'detailed_soil_report': 'Detailed Soil Report', 'soil_type_label': 'Soil Type', 'ph_level_label': 'pH Level', 
+            'organic_carbon_label': 'Organic Carbon', 'nitrogen_label': 'Nitrogen (N)', 'phosphorus_label': 'Phosphorus (P)', 
+            'potassium_label': 'Potassium (K)', 'close_btn': 'Close',
+            'login_btn': 'Login', 'enter_name_label': 'Enter Your Name', 'enter_name_placeholder': 'e.g., Bhavesh Patel', 
+            'feature_not_implemented': 'Feature Not Implemented', 'feature_not_implemented_message': 'This feature is currently under development. Stay tuned for updates!', 
+            'ok_btn': 'OK', 'location_permission_title': 'Location Access', 
+            'location_permission_message': 'To provide hyper-local weather, soil data, and crop recommendations, krivya needs access to your location.', 
+            'location_detecting': 'Detecting location...', 'cors_error_title': 'Proxy Activation Required', 
+            'cors_error_message': 'To enable AI features, please visit cors-anywhere.herokuapp.com/corsdemo to activate the temporary proxy, then return and try again.', 
+            'diagnosis_title': 'Diagnose Crop Disease', 'diagnosis_subtitle': 'Upload a photo of a plant leaf to get an instant AI-powered diagnosis and treatment plan.', 
+            'upload_photo_btn': 'Upload Photo', 'diagnosis_report_title': 'Disease Diagnosis Report', 'get_diagnosis_btn': 'Get Diagnosis', 
+            'location_permission_denied_user': 'You have denied location permission.', 'location_permission_policy': 'Location is disabled by browser policy.', 
+            'location_unavailable': 'Location information is currently unavailable.', 'location_timeout': 'The location request timed out.', 
+            'location_policy_error_title': 'Location Unavailable', 'location_policy_error_message': 'Location services are disabled by the browser\'s security policy in this environment. The app will continue with default data.', 
+            'soil_loading': 'Loading...', 'farm_name_placeholder': 'Your Farm Name', 'deny_btn': 'Deny', 'allow_btn': 'Allow', 'humidity_low': 'Low', 
+            'humidity_moderate': 'Moderate', 'humidity_high': 'High', 'market_trend_sample_1': '▲ ₹15 yesterday', 'market_trend_sample_2': '▲ ₹25 yesterday',
+            'yield_analysis_title': 'Yield Analysis', 'yield_analysis_subtitle': "Calculate and record your farm's potential yield.", 'farm_area_label': 'Farm Area (in acres)',
+            'crop_planted_label': 'Current Crop Planted', 'calculate_yield_btn': 'Calculate & Record Yield', 'yield_history_title': 'Yield History', 
+            'no_yield_records': 'No past yield records found.', 'yield_report_title': 'Estimated Yield Report', 'total_yield_label': 'Total Estimated Yield',
+            'est_revenue_label': 'Estimated Revenue', 'based_on_price': 'Based on a modal price of ₹%PRICE% / Quintal', 'quintals_unit': 'Quintals', 'record_for': 'record for',
+            'details_saved_title': 'Success', 'details_saved_message': 'Your farm details have been saved.', 'forecast_title': '7-Day Forecast',
+            'market_rate_label': 'Market Rate', 'modal_price': 'Modal Price', 'price_range': 'Price Range',
+            'market_search_placeholder': 'Search for a crop...', 'back_to_list': 'Back to Full List', 'crop_not_found': 'Crop not found.',
+            'grade_a_quality': 'Grade A', 'yesterdays_price': "Yesterday's Price", 'last_week_avg': 'Last Week Avg.',
+            'location_denied_title': 'Location Access Denied', 
+            'location_denied_message': 'You have blocked location access. To use location-based features, please go to your browser\'s site settings and allow location permission for this app.'
+        };
+
+        // --- I18n Language Data ---
+        const translations = {
+            'en': englishTranslations,
+            'hi': { ...englishTranslations, 'welcome_to_krivya': 'कृव्या में आपका स्वागत है', 'app_subtitle': 'आपका हाइपर-लोकल खेती पार्टनर', 'cors_error_title': 'प्रॉक्सी सक्रियण आवश्यक है', 'cors_error_message': 'एआई सुविधाओं को सक्षम करने के लिए, कृपया अस्थायी प्रॉक्सी को सक्रिय करने के लिए cors-anywhere.herokuapp.com/corsdemo पर जाएं, फिर वापस आएं और पुनः प्रयास करें।', 'offline_mode': 'ऑफलाइन', 'welcome_message': 'नमस्ते, %NAME%!', 'todays_plan_title': 'AI-जनरेटेड आज की योजना', 'todays_plan_prompt': 'वास्तविक समय के डेटा के आधार पर आज की कार्य योजना प्राप्त करने के लिए नीचे टैप करें।', 'generate_plan_btn': '✨ आज की योजना बनाएं', 'weather_card_title': 'मौसम', 'humidity_card_title': 'नमी', 'market_price_card_title': 'गेहूं का भाव', 'soil_card_title': 'मिट्टी का स्वास्थ्य', 'tap_for_details': 'विवरण के लिए टैप करें', 'chat_welcome': 'नमस्ते! मुझसे अपनी खेती के बारे में कोई प्रश्न पूछें।', 'chat_placeholder': 'टाइप करें या बोलें...', 'analysis_title': 'खेत का विश्लेषण', 'profile_title': 'प्रोफ़ाइल और सेटिंग्स', 'farm_details': 'मेरे खेत का विवरण', 'language': 'भाषा', 'notifications': 'सूचनाएं', 'logout': 'लॉग आउट', 'nav_home': 'होम', 'nav_assistant': 'सहायक', 'nav_analysis': 'विश्लेषण', 'nav_profile': 'प्रोफ़इल', 'nav_market': 'बाजार', 'market_title': 'स्थानीय मंडी भाव', 'select_language': 'भाषा चुनें', 'cancel': 'रद्द करें', 'mic_permission_denied': '🎤 माइक्रोफ़ोन का एक्सेस अस्वीकार कर दिया गया था।', 'detailed_soil_report': 'विस्तृत मिट्टी रिपोर्ट', 'soil_type_label': 'मिट्टी का प्रकार', 'ph_level_label': 'पीएच स्तर', 'organic_carbon_label': 'जैविक कार्बन', 'nitrogen_label': 'नाइट्रोजन (एन)', 'phosphorus_label': 'फॉस्फोरस (पी)', 'potassium_label': 'पोटेशियम (के)', 'close_btn': 'बंद करें', 'login_btn': 'लॉग इन करें', 'enter_name_label': 'अपना नाम दर्ज करें', 'enter_name_placeholder': 'जैसे, भावेश पटेल', 'ok_btn': 'ठीक है', 'location_permission_title': 'स्थान की अनुमति', 'location_permission_message': 'हाइपर-लोकल मौसम, मिट्टी डेटा और फसल सिफारिशें प्रदान करने के लिए, krivya को आपके स्थान तक पहुंचने की आवश्यकता है।', 'location_detecting': 'स्थान का पता लगाया जा रहा है...', 'diagnosis_title': 'फसल रोग का निदान करें', 'diagnosis_subtitle': 'तत्काल AI-संचालित निदान और उपचार योजना प्राप्त करने के लिए पौधे की पत्ती का फोटो अपलोड करें।', 'upload_photo_btn': 'फोटो अपलोड करें', 'diagnosis_report_title': 'रोग निदान रिपोर्ट', 'get_diagnosis_btn': 'निदान प्राप्त करें', 'location_permission_denied_user': 'आपने स्थान की अनुमति से इनकार कर दिया है।', 'location_permission_policy': 'ब्राउज़र नीति द्वारा स्थान अक्षम है।', 'location_unavailable': 'स्थान की जानकारी वर्तमान में अनुपलब्ध है।', 'location_timeout': 'स्थान अनुरोध का समय समाप्त हो गया।', 'soil_loading': 'लोड हो रहा है...', 'farm_name_placeholder': 'आपके खेत का नाम', 'deny_btn': 'मना करें', 'allow_btn': 'अनुमति दें', 'humidity_low': 'कम', 'humidity_moderate': 'मध्यम', 'humidity_high': 'उच्च', 'market_trend_sample_1': '▲ ₹15 कल से', 'market_trend_sample_2': '▲ ₹25 कल से', 'yield_analysis_title': 'उपज विश्लेषण', 'yield_analysis_subtitle': 'अपने खेत की संभावित उपज की गणना और रिकॉर्ड करें।', 'farm_area_label': 'खेत का क्षेत्रफल (एकड़ में)', 'crop_planted_label': 'वर्तमान में बोई गई फसल', 'calculate_yield_btn': 'उपज की गणना और रिकॉर्ड करें', 'yield_history_title': 'उपज का इतिहास', 'no_yield_records': 'कोई पिछला उपज रिकॉर्ड नहीं मिला।', 'yield_report_title': 'अनुमानित उपज रिपोर्ट', 'total_yield_label': 'कुल अनुमानित उपज', 'est_revenue_label': 'अनुमानित राजस्व', 'based_on_price': '₹%PRICE% / क्विंटल के मोडल मूल्य के आधार पर', 'quintals_unit': 'क्विंटल', 'record_for': 'के लिए रिकॉर्ड', 'farm_name_label': 'खेत का नाम', 'farm_area_profile_label': 'कुल खेत का क्षेत्रफल (एकड़ में)', 'save_details_btn': 'विवरण सहेजें', 'details_saved_title': 'सफलता', 'details_saved_message': 'आपके खेत का विवरण सहेज लिया गया है।', 'forecast_title': '7-दिन का पूर्वानुमान', 'market_rate_label': 'बाजार दर', 'modal_price': 'मोडल मूल्य', 'price_range': 'मूल्य सीमा', 'location_denied_title': 'स्थान की अनुमति अस्वीकृत', 'location_denied_message': 'आपने स्थान की पहुंच को अवरुद्ध कर दिया है। स्थान-आधारित सुविधाओं का उपयोग करने के लिए, कृपया अपने ब्राउज़र की साइट सेटिंग्स पर जाएं और इस ऐप के लिए स्थान की अनुमति दें।' },
+            'kn': { ...englishTranslations, 'app_subtitle': 'ನಿಮ್ಮ ಹೈಪರ್-ಲೋಕಲ್ ಕೃಷಿ ಪಾಲುದಾರ', 'welcome_message': 'ಸ್ವಾಗತ, %NAME%!', 'language': 'ಭಾಷೆ', 'select_language': 'ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ', 'nav_home': 'ಮನೆ', 'nav_assistant': 'ಸಹಾಯಕ', 'nav_analysis': 'ವಿಶ್ಲೇಷಣೆ', 'nav_profile': 'ಪ್ರೊಫೈಲ್', 'logout': 'ಲಾಗ್ ಔಟ್', 'cancel': 'ರದ್ದುಮಾಡಿ', 'login_btn': 'ಲಾಗಿನ್ ಮಾಡಿ', 'enter_name_label': 'ನಿಮ್ಮ ಹೆಸರು ನಮೂದಿಸಿ', 'deny_btn': 'ನಿರಾಕರಿಸು', 'allow_btn': 'ಅನುಮತಿಸು', 'humidity_low': 'ಕಡಿಮೆ', 'humidity_moderate': 'ಮಧ್ಯಮ', 'humidity_high': 'ಹೆಚ್ಚು', 'market_rate_label': 'ಮಾರುಕಟ್ಟೆ ದರ' },
+            'or': { ...englishTranslations, 'app_subtitle': 'ଆପଣଙ୍କର ହାଇପର୍-ଲୋକାଲ୍ ଚାଷ ସାଥୀ', 'welcome_message': 'ସ୍ୱାଗତ, %NAME%!', 'language': 'ଭାଷା', 'select_language': 'ଭାଷା ବାଛନ୍ତୁ', 'nav_home': 'ଘର', 'nav_assistant': 'ସହାୟକ', 'nav_analysis': 'ବିଶ୍ଳେଷଣ', 'nav_profile': 'ପ୍ରୋଫାଇଲ୍', 'logout': 'ଲଗ୍ ଆଉଟ୍', 'cancel': 'ବାତିଲ କରନ୍ତୁ', 'login_btn': 'ଲଗଇନ୍ କରନ୍ତୁ', 'enter_name_label': 'ଆପଣଙ୍କ ନାମ ଦିଅନ୍ତୁ', 'deny_btn': 'ମନା କରନ୍ତୁ', 'allow_btn': 'ଅନୁମତି ଦିଅନ୍ତୁ', 'humidity_low': 'କମ୍', 'humidity_moderate': 'ମଧ୍ୟମ', 'humidity_high': 'ଅଧିକ', 'market_rate_label': 'ବଜାର ଦର' },
+            'mr': { ...englishTranslations, 'app_subtitle': 'तुमचा हायपर-लोकल शेती भागीदार', 'welcome_message': 'स्वागत आहे, %NAME%!', 'language': 'भाषा', 'select_language': 'भाषा निवडा', 'nav_home': 'मुख्यपृष्ठ', 'nav_assistant': 'सहाय्यक', 'nav_analysis': 'विश्लेषण', 'nav_profile': 'प्रोफाइल', 'logout': 'लॉग आउट', 'cancel': 'रद्द करा', 'login_btn': 'लॉग इन करा', 'enter_name_label': 'तुमचे नाव टाका', 'deny_btn': 'नकार द्या', 'allow_btn': 'परवानगी द्या', 'humidity_low': 'कमी', 'humidity_moderate': 'मध्यम', 'humidity_high': 'जास्त', 'market_rate_label': 'बाजार भाव' },
+            'gu': { ...englishTranslations, 'app_subtitle': 'તમારા હાઇપર-લોકલ ખેતી ભાગીદાર', 'welcome_message': 'આપનું સ્વાગત છે, %NAME%!', 'language': 'ભાષા', 'select_language': 'ભાષા પસંદ કરો', 'nav_home': 'ઘର', 'nav_assistant': 'સહાયક', 'nav_analysis': 'વિશ્લેષણ', 'nav_profile': 'પ્રોફાઇલ', 'logout': 'લૉગ આઉટ', 'cancel': 'રદ કરો', 'login_btn': 'ਲૉਗિન કરો', 'enter_name_label': 'તમારું નામ દાખલ કરો', 'deny_btn': 'નકારો', 'allow_btn': 'મંજૂરી આપો', 'humidity_low': 'ઓછી', 'humidity_moderate': 'મધ્યમ', 'humidity_high': 'વધુ', 'market_rate_label': 'બજાર દર' },
+            'pa': { ...englishTranslations, 'app_subtitle': 'ਤੁਹਾਡਾ ਹਾਈਪਰ-ਲੋਕਲ ਖੇਤੀਬਾੜੀ ਸਾਥੀ', 'welcome_message': 'ਜੀ ਆਇਆਂ ਨੂੰ, %NAME%!', 'language': 'ਭਾਸ਼ਾ', 'select_language': 'ਭਾਸ਼ਾ ਚੁਣੋ', 'nav_home': 'ਮੁੱਖ ਪੰਨਾ', 'nav_assistant': 'ਸਹਾਇਕ', 'nav_analysis': 'ਵਿਸ਼ਲੇਸ਼ਣ', 'nav_profile': 'ਪ੍ਰੋਫਾਈਲ', 'logout': 'ਲੌਗ ਆਉਟ', 'cancel': 'ਰੱਦ ਕਰੋ', 'login_btn': 'ਲਾਗਿਨ ਕਰੋ', 'enter_name_label': 'ਆਪਣਾ ਨਾਮ ਦਰਜ ਕਰੋ', 'deny_btn': 'ਮਨ੍ਹਾ ਕਰੋ', 'allow_btn': 'ਆਗਿਆ ਦਿਓ', 'humidity_low': 'ਘੱਟ', 'humidity_moderate': 'ਦਰਮਿਆਨੀ', 'humidity_high': 'ਜ਼ਿਆਦਾ', 'market_rate_label': 'ਬਾਜ਼ਾਰ ਦਰ' },
+            'ml': { ...englishTranslations, 'app_subtitle': 'നിങ്ങളുടെ ഹൈപ്പർ-ലോക്കൽ ഫാമിംഗ് പങ്കാളി', 'welcome_message': 'സ്വാഗതം, %NAME%!', 'language': 'ഭാഷ', 'select_language': 'ഭാഷ തിരഞ്ഞെടുക്കുക', 'nav_home': 'ഹോം', 'nav_assistant': 'സഹായി', 'nav_analysis': 'വിശകലനം', 'nav_profile': 'പ്രൊഫൈൽ', 'logout': 'ലോഗ് ഔട്ട്', 'cancel': 'റദ്ദാക്കുക', 'login_btn': 'ലോഗിൻ ചെയ്യുക', 'enter_name_label': 'നിങ്ങളുടെ പേര് നൽകുക', 'deny_btn': 'നിരസിക്കുക', 'allow_btn': 'അനുവദിക്കുക', 'humidity_low': 'കുറഞ്ഞ', 'humidity_moderate': 'ഇടത്തരം', 'humidity_high': 'ഉയർന്ന', 'market_rate_label': 'വിപണി നിരക്ക്' },
+            'ta': { ...englishTranslations, 'app_subtitle': 'உங்கள் ஹைப்பர்-லோக்கல் விவசாய கூட்டாளர்', 'welcome_message': 'வாருங்கள், %NAME%!', 'language': 'மொழி', 'select_language': 'மொழியை தேர்ந்தெடுங்கள்', 'nav_home': 'முகப்பு', 'nav_assistant': 'உதவியாளர்', 'nav_analysis': 'பகுப்பாய்வு', 'nav_profile': 'சுயவிவரம்', 'logout': 'வெளியேறு', 'cancel': 'ரத்துசெய்', 'login_btn': 'உள்நுழைக', 'enter_name_label': 'உங்கள் பெயரை உள்ளிடவும்', 'deny_btn': 'மறு', 'allow_btn': 'अनुமதி', 'humidity_low': 'குறைந்த', 'humidity_moderate': 'மிதமான', 'humidity_high': 'அதிக', 'market_rate_label': 'சந்தை விகிதம்' },
+            'te': { ...englishTranslations, 'app_subtitle': 'మీ హైపర్-లోకల్ ఫార్మింగ్ భాగస్వామి', 'welcome_message': 'స్వాగతం, %NAME%!', 'language': 'భాഷ', 'select_language': 'భాഷను ఎంచుకోండి', 'nav_home': 'హోమ్', 'nav_assistant': 'సహాయకుడు', 'nav_analysis': 'విశ్లేషణ', 'nav_profile': 'ప్రొఫైల్', 'logout': 'లాగ్ అవుట్', 'cancel': 'రద్దు చేయండి', 'login_btn': 'లాగిన్', 'enter_name_label': 'మీ పేరు నమోదు చేయండి', 'deny_btn': 'తిరస్కరించు', 'allow_btn': 'అనుమతించు', 'humidity_low': 'తక్కువ', 'humidity_moderate': 'मध्यम', 'humidity_high': 'అధిక', 'market_rate_label': 'మార్కెట్ రేటు' },
+            'bn': { ...englishTranslations, 'app_subtitle': 'আপনার হাইপার-লোকাল ফার্মিং পার্টনার', 'welcome_message': 'স্বাগতম, %NAME%!', 'language': 'ভাষা', 'select_language': 'ভাষা নির্বাচন করুন', 'nav_home': 'হোম', 'nav_assistant': 'সহকারী', 'nav_analysis': 'বিশ্লেষণ', 'nav_profile': 'প্রোফাইল', 'logout': 'লগ আউট', 'cancel': 'বাতিল করুন', 'login_btn': 'লগইন করুন', 'enter_name_label': 'আপনার নাম লিখুন', 'deny_btn': 'অস্বীকার করুন', 'allow_btn': 'अनुमति দিন', 'humidity_low': 'কম', 'humidity_moderate': 'মাঝারি', 'humidity_high': 'উচ্চ', 'market_rate_label': 'বাজার দর' }
+        };
+
+        // --- State Management ---
+        let currentLanguage = 'en';
+        let isOffline = false;
+        let isLoggedIn = false;
+        let userName = '';
+        let isListening = false;
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        let hasMicPermission = false;
+        let soilData = null;
+        let locationData = { city: 'Unknown', state: '', lat: null, lon: null };
+        const openrouterApiKey = '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';
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-IN';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+        }
+
+        // --- DOM Elements ---
+        const loginView = document.getElementById('login-view');
+        const appContainer = document.getElementById('app-container');
+        const nameInput = document.getElementById('name-input');
+        const loginBtn = document.getElementById('login-btn');
+        const welcomeHeader = document.getElementById('welcome-message-header');
+        const profileInitialCircle = document.getElementById('profile-initial-circle');
+        const profileName = document.getElementById('profile-name');
+        const logoutBtn = document.getElementById('logout-btn');
+        const views = ['dashboard-view', 'chat-view', 'analysis-view', 'profile-view', 'market-view'];
+        const navItems = document.querySelectorAll('.nav-item');
+        const chatInput = document.getElementById('chat-input');
+        const micBtn = document.getElementById('mic-btn');
+        const sendBtn = document.getElementById('send-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const generatePlanBtn = document.getElementById('generate-plan-btn');
+        const planContent = document.getElementById('plan-content');
+        const offlineToggle = document.getElementById('offline-toggle');
+        const languageBtn = document.getElementById('language-btn');
+        const langOptionBtns = document.querySelectorAll('.lang-option-btn');
+        const soilCard = document.getElementById('soil-card');
+        const soilTypeEl = document.getElementById('soil-type');
+        const farmDetailsBtn = document.getElementById('farm-details-btn');
+        const notificationsBtn = document.getElementById('notifications-btn');
+        const locationDisplay = document.getElementById('location-display');
+        const allowLocationBtn = document.getElementById('allow-location-btn');
+        const denyLocationBtn = document.getElementById('deny-location-btn');
+        const uploadPhotoBtn = document.getElementById('upload-photo-btn');
+        const imageUploadInput = document.getElementById('image-upload-input');
+        const diagnosisImagePreview = document.getElementById('diagnosis-image-preview');
+        const diagnosisDetailsContent = document.getElementById('diagnosis-details-content');
+        const getDiagnosisBtn = document.getElementById('get-diagnosis-btn');
+        const farmAreaInput = document.getElementById('farm-area-input');
+        const cropNameInput = document.getElementById('crop-name-input');
+        const calculateYieldBtn = document.getElementById('calculate-yield-btn');
+        const yieldResults = document.getElementById('yield-results');
+        const yieldHistoryList = document.getElementById('yield-history-list');
+        const farmNameInputProfile = document.getElementById('farm-name-input-profile');
+        const farmAreaInputProfile = document.getElementById('farm-area-input-profile');
+        const saveFarmDetailsBtn = document.getElementById('save-farm-details-btn');
+        const profileFarmName = document.getElementById('profile-farm-name');
+        const marketDataContainer = document.getElementById('market-data-container');
+        const marketLocation = document.getElementById('market-location');
+        const marketSearchInput = document.getElementById('market-search-input');
+        const marketSearchBtn = document.getElementById('market-search-btn');
+        const marketListContainer = document.getElementById('market-list-container');
+        const marketSearchResultContainer = document.getElementById('market-search-result-container');
+        const backToMarketListBtn = document.getElementById('back-to-market-list-btn');
+
+        
+        async function askMyApi(userInput) {
+            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+            const baseUrl = "https://weather-api-9za4.onrender.com/ask-farming-expert";
+            const encodedQuestion = encodeURIComponent(userInput);
+            const finalUrl = `${proxyUrl}${baseUrl}?question=${encodedQuestion}`;
+
+            try {
+                const response = await fetch(finalUrl);
+                const responseText = await response.text();
+                
+                 if (!response.ok) {
+                     if (responseText.includes("corsdemo")) {
+                        showAlert('cors_error_title', 'cors_error_message');
+                        return "Proxy activation needed.";
+                    }
+                    return "Sorry, the farming expert is unavailable right now.";
+                }
+                
+                const data = JSON.parse(responseText);
+                return data.answer;
+            } catch (error) {
+                return "An error occurred. Please check your connection and try again.";
+            }
+        }
+
+        async function callLocationAwareExpertAPI(endpoint) {
+            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+            const baseUrl = 'https://weather-api-9za4.onrender.com/';
+            const finalUrl = `${proxyUrl}${baseUrl}${endpoint}`;
+            const options = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    latitude: locationData.lat,
+                    longitude: locationData.lon,
+                    language: currentLanguage
+                })
+            };
+
+            try {
+                const response = await fetch(finalUrl, options);
+                const responseText = await response.text();
+                if (!response.ok) {
+                    if (responseText.includes("corsdemo")) {
+                        showAlert('cors_error_title', 'cors_error_message');
+                    }
+                    return { answer: "Sorry, the expert is unavailable right now." };
+                }
+                return await response.json();
+            } catch (error) {
+                return { answer: "It seems there's a network issue." };
+            }
+        }
+        
+        // --- Data Fetching & Simulation ---
+        function getWeatherConditionFromCode(code) {
+            const codeMap = { 0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Depositing rime fog', 51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle', 56: 'Light freezing drizzle', 57: 'Dense freezing drizzle', 61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain', 66: 'Light freezing rain', 67: 'Heavy freezing rain', 71: 'Slight snow fall', 73: 'Moderate snow fall', 75: 'Heavy snow fall', 77: 'Snow grains', 80: 'Slight rain showers', 81: 'Moderate rain showers', 82: 'Violent rain showers', 85: 'Slight snow showers', 86: 'Heavy snow showers', 95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail' };
+            return codeMap[code] || 'Unknown';
+        }
+        
+        function getWeatherIconName(code) {
+            if ([0, 1].includes(code)) return 'sun';
+            if (code === 2) return 'cloud-sun';
+            if (code === 3) return 'cloud';
+            if ([45, 48].includes(code)) return 'cloud-fog';
+            if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return 'cloud-rain';
+            if ([56, 57, 66, 67].includes(code)) return 'cloud-drizzle';
+            if ([71, 73, 75, 85, 86].includes(code)) return 'snowflake';
+            if ([95, 96, 99].includes(code)) return 'cloud-lightning';
+            return 'cloud';
+        }
+
+
+        async function fetchWeatherData(lat, lon) {
+            if (!lat || !lon) return { temp: '--', condition: 'N/A', humidity: '--' };
+            const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code`;
+            
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) return { temp: '--', condition: 'Error', humidity: '--' };
+                const data = await response.json();
+                return { temp: `${Math.round(data.current.temperature_2m)}°C`, condition: getWeatherConditionFromCode(data.current.weather_code), humidity: `${data.current.relative_humidity_2m}%` };
+            } catch (error) { return { temp: '--', condition: 'Network Error', humidity: '--' }; }
+        }
+        
+        async function fetchForecastData(lat, lon) {
+            if (!lat || !lon) return null;
+            const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (error) {
+                console.error("Failed to fetch forecast:", error);
+                return null;
+            }
+        }
+
+
+        async function fetchSimulatedSoilData(lat, lon) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            if (locationData.state && locationData.state.toLowerCase().includes('maharashtra')) {
+                 return { soil_type: "Coastal Alluvial", organic_carbon_percent: 0.6, ph: 7.5, nitrogen: "Medium", phosphorus: "Medium", potassium: "Medium" };
+            }
+            return { soil_type: "Clay Loam", organic_carbon_percent: 0.7, ph: 7.2, nitrogen: "Medium", phosphorus: "Low", potassium: "High" };
+        }
+        
+        async function fetchReverseGeocode(lat, lon) {
+            const apiUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+            try {
+                const response = await fetch(apiUrl, { signal: AbortSignal.timeout(5000) });
+                if (!response.ok) return null;
+                const data = await response.json();
+                return { city: data.city || data.locality || 'Unknown Area', state: data.principalSubdivision || '' };
+            } catch (error) { return null; }
+        }
+
+        async function fetchMandiPrices(location, commodity = null) {
+            if (!location || location === 'Unknown') return null;
+
+            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+            const openrouterUrl = "https://openrouter.ai/api/v1/chat/completions";
+            const finalUrl = proxyUrl + openrouterUrl;
+            
+            let prompt;
+            if (commodity) {
+                prompt = `For the location '${location}', India, identify its main wholesale agricultural market (mandi). Then, fetch the current wholesale rates for '${commodity}'. Respond ONLY with a JSON object containing 'market_name', 'source', and a 'commodities' list with one entry. The entry should have 'name', 'min_price_quintal', 'max_price_quintal', and 'modal_price_quintal'.`;
+            } else {
+                prompt = `For the location '${location}', India, identify its most significant wholesale agricultural market (mandi). Then, fetch the current wholesale rates for its 3-5 most important local commodities (e.g., onions, tomatoes, cotton, wheat etc.). Respond ONLY with a JSON object containing 'market_name', 'source', and a 'commodities' list. Each entry in the list should have 'name', 'min_price_quintal', 'max_price_quintal', and 'modal_price_quintal'.`;
+            }
+
+            const payload = {
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"}
+            };
+            const headers = { "Authorization": `Bearer ${openrouterApiKey}`, "Content-Type": "application/json" };
+
+            try {
+                const response = await fetch(finalUrl, { method: 'POST', headers: headers, body: JSON.stringify(payload), timeout: 30000 });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    if (errorText.includes("corsdemo")) showAlert('cors_error_title', 'cors_error_message');
+                    console.error("Mandi API Error:", errorText);
+                    return null;
+                }
+                const data = await response.json();
+                const content = data?.choices?.[0]?.message?.content;
+                if (content) {
+                    return JSON.parse(content);
+                }
+                return null;
+            } catch (e) {
+                console.error("Error fetching or parsing mandi prices:", e);
+                return null;
+            }
+        }
+
+
+        // --- UI Update & Logic Functions ---
+        function updateUIText(lang) {
+            document.querySelectorAll('[data-i18n-key]').forEach(el => {
+                const key = el.dataset.i18nKey;
+                let text = translations[lang]?.[key] || translations['en'][key];
+                if (key === 'welcome_message' && userName) { text = text.replace('%NAME%', userName); }
+                if (text) el.innerText = text;
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.dataset.i18nPlaceholder;
+                if (translations[lang]?.[key]) el.placeholder = translations[lang][key];
+            });
+            if (recognition) {
+                const langMap = { en: 'en-IN', hi: 'hi-IN', bn: 'bn-IN', gu: 'gu-IN', kn: 'kn-IN', ml: 'ml-IN', mr: 'mr-IN', ta: 'ta-IN', te: 'te-IN', pa: 'pa-IN', or: 'or-IN' };
+                recognition.lang = langMap[lang] || 'en-IN';
+            }
+        }
+
+        function addMessageToChat(message, sender = 'ai', isSystem = false) {
+            const messageDiv = document.createElement('div');
+            if (isSystem) {
+                messageDiv.className = 'system-message';
+                messageDiv.textContent = message;
+            } else {
+                const isUser = sender === 'user';
+                messageDiv.className = `flex items-start space-x-3 ${isUser ? 'justify-end' : ''}`;
+                const content = isUser ? `<div class="bg-green-600 text-white p-3 rounded-lg max-w-xs prose-ai">${message}</div>` : `<div class="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0"><i data-lucide="bot" class="text-white w-5 h-5"></i></div><div class="bg-slate-200 p-3 rounded-lg max-w-xs prose-ai">${marked.parse(message)}</div>`;
+                messageDiv.innerHTML = content;
+            }
+            chatMessages.appendChild(messageDiv);
+            if (!isSystem && sender !== 'user') lucide.createIcons();
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showTypingIndicator(container) {
+            container.innerHTML = `<div class="flex justify-center items-center p-4"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+        }
+        
+        function showModal(modalId) { const modal = document.getElementById(modalId); if (!modal) return; modal.classList.remove('hidden'); setTimeout(() => { modal.classList.remove('opacity-0'); modal.querySelector('.modal-content').classList.remove('opacity-0', 'scale-95'); }, 10); }
+        function hideModal(modalId) { const modal = document.getElementById(modalId); if (!modal) return; modal.classList.add('opacity-0'); modal.querySelector('.modal-content').classList.add('opacity-0', 'scale-95'); setTimeout(() => modal.classList.add('hidden'), 300); }
+        function showAlert(titleKey, messageKey) { document.getElementById('alert-title').innerText = translations[currentLanguage][titleKey]; document.getElementById('alert-message').innerText = translations[currentLanguage][messageKey]; showModal('alert-modal'); }
+
+        function updateDashboardData(data) {
+             document.getElementById('weather-value').textContent = data.weather.temp;
+             document.getElementById('weather-condition-text').textContent = data.weather.condition;
+             document.getElementById('humidity-value').textContent = data.humidity.value;
+             const humidityEl = document.getElementById('humidity-condition-text');
+             humidityEl.dataset.i18nKey = data.humidity.conditionKey;
+             humidityEl.textContent = translations[currentLanguage][data.humidity.conditionKey];
+             
+             document.getElementById('market-crop-name').textContent = `${data.market.crop} Price`;
+             document.getElementById('market-value').textContent = `₹${data.market.value}`;
+             delete document.getElementById('market-crop-name').dataset.i18nKey;
+
+             const marketTrendEl = document.getElementById('market-trend-text');
+             marketTrendEl.dataset.i18nKey = data.market.trendKey;
+             marketTrendEl.textContent = translations[currentLanguage][data.market.trendKey];
+             
+             soilTypeEl.textContent = data.soil.soil_type;
+             delete soilTypeEl.dataset.i18nKey;
+             soilData = data.soil;
+        }
+        
+        function renderForecast(forecast) {
+            const container = document.getElementById('forecast-container');
+            container.innerHTML = ''; // Clear previous forecast
+
+            if (!forecast || !forecast.daily || !forecast.daily.time) {
+                container.innerHTML = '<p class="text-slate-500 text-sm col-span-7">Forecast data is unavailable.</p>';
+                return;
+            }
+
+            const days = forecast.daily.time;
+            const weatherCodes = forecast.daily.weather_code;
+            const maxTemps = forecast.daily.temperature_2m_max;
+            const minTemps = forecast.daily.temperature_2m_min;
+
+            days.forEach((dateStr, index) => {
+                const date = new Date(dateStr);
+                const dayName = date.toLocaleDateString(currentLanguage, { weekday: 'short' });
+                const iconName = getWeatherIconName(weatherCodes[index]);
+                const maxTemp = Math.round(maxTemps[index]);
+                const minTemp = Math.round(minTemps[index]);
+
+                const forecastItemHTML = `
+                    <div class="bg-slate-50 p-2 rounded-lg flex flex-col items-center">
+                        <p class="text-xs font-bold text-slate-600">${dayName}</p>
+                        <i data-lucide="${iconName}" class="w-6 h-6 my-1 text-slate-500"></i>
+                        <p class="text-sm font-semibold">${maxTemp}°</p>
+                        <p class="text-xs text-slate-400">${minTemp}°</p>
+                    </div>
+                `;
+                container.innerHTML += forecastItemHTML;
+            });
+            lucide.createIcons();
+        }
+
+        function renderMarketData(marketData) {
+            marketDataContainer.innerHTML = ''; // Clear previous data
+            if (!marketData || !marketData.commodities || marketData.commodities.length === 0) {
+                marketDataContainer.innerHTML = '<p class="text-slate-500 text-sm">Could not fetch market data.</p>';
+                marketLocation.textContent = 'Unknown Market';
+                return;
+            }
+
+            marketLocation.textContent = marketData.market_name || 'Local Market';
+            const t = (key) => translations[currentLanguage][key] || translations.en[key];
+
+            marketData.commodities.forEach(item => {
+                const trend = Math.random() > 0.5 ? 'up' : 'down'; // Simulate trend
+                const trendColor = trend === 'up' ? 'text-green-600' : 'text-red-600';
+                const trendIcon = trend === 'up' ? 'trending-up' : 'trending-down';
+
+                const itemHTML = `
+                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-lg">${item.name}</h4>
+                            <div class="flex items-center ${trendColor}">
+                                <i data-lucide="${trendIcon}" class="w-4 h-4 mr-1"></i>
+                                <span class="text-sm font-semibold">₹${Math.floor(Math.random() * 50)}</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between text-slate-600 text-sm">
+                            <div>
+                                <p class="text-xs">${t('modal_price')}</p>
+                                <p class="font-semibold text-base">₹${item.modal_price_quintal.toLocaleString('en-IN')}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs">${t('price_range')}</p>
+                                <p class="font-semibold">₹${item.min_price_quintal} - ₹${item.max_price_quintal}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                marketDataContainer.innerHTML += itemHTML;
+            });
+            lucide.createIcons();
+        }
+
+        function renderMarketSearchResult(marketData, query) {
+            const container = marketSearchResultContainer;
+            container.innerHTML = '';
+            const t = (key) => translations[currentLanguage][key] || translations.en[key];
+
+            if (!marketData || !marketData.commodities || marketData.commodities.length === 0) {
+                 container.innerHTML = `<p class="text-slate-500 text-center p-4">${t('crop_not_found')}</p>`;
+                 return;
+            }
+
+            const item = marketData.commodities[0];
+            const modalPrice = item.modal_price_quintal;
+            const yesterdayPrice = Math.round(modalPrice * (1 + (Math.random() - 0.5) * 0.1)); // +/- 5%
+            const lastWeekAvg = Math.round(modalPrice * (1 + (Math.random() - 0.5) * 0.2)); // +/- 10%
+            
+            const resultHTML = `
+                <div class="bg-white p-4 rounded-lg shadow-md border">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-2xl font-bold text-green-700">${item.name}</h3>
+                        <span class="text-xs bg-green-100 text-green-800 font-semibold px-2 py-1 rounded-full">${t('grade_a_quality')}</span>
+                    </div>
+                    <p class="text-slate-500 text-sm mb-4">${marketData.market_name || 'Local Market'}</p>
+
+                    <div class="text-center bg-slate-50 p-4 rounded-lg my-4">
+                        <p class="text-sm text-slate-600">${t('modal_price')}</p>
+                        <p class="text-4xl font-bold text-slate-800">₹${modalPrice.toLocaleString('en-IN')}</p>
+                        <p class="text-xs text-slate-500">/ ${t('quintals_unit')}</p>
+                    </div>
+
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-slate-600">${t('price_range')}</span>
+                            <span class="font-semibold">₹${item.min_price_quintal} - ₹${item.max_price_quintal}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-600">${t('yesterdays_price')}</span>
+                            <span class="font-semibold">₹${yesterdayPrice.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-600">${t('last_week_avg')}</span>
+                            <span class="font-semibold">₹${lastWeekAvg.toLocaleString('en-IN')}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = resultHTML;
+        }
+
+
+
+        // --- Chat History Functions ---
+        function saveMessageToHistory(message, sender) {
+            const history = JSON.parse(localStorage.getItem('krivya_chatHistory')) || [];
+            history.push({
+                message: message,
+                sender: sender,
+                timestamp: new Date().getTime()
+            });
+            localStorage.setItem('krivya_chatHistory', JSON.stringify(history));
+        }
+
+        function loadChatHistory() {
+            let history = JSON.parse(localStorage.getItem('krivya_chatHistory')) || [];
+
+            // Clear messages older than 30 days
+            const thirtyDaysAgo = new Date().getTime() - (30 * 24 * 60 * 60 * 1000);
+            const filteredHistory = history.filter(item => item.timestamp > thirtyDaysAgo);
+
+            if (history.length !== filteredHistory.length) {
+                localStorage.setItem('krivya_chatHistory', JSON.stringify(filteredHistory));
+            }
+            history = filteredHistory;
+
+            chatMessages.innerHTML = ''; // Clear existing messages
+
+            if (history.length > 0) {
+                history.forEach(item => addMessageToChat(item.message, item.sender));
+            } else {
+                // If no history, add the default welcome message
+                addMessageToChat(translations[currentLanguage]['chat_welcome'], 'ai');
+            }
+        }
+
+
+        // --- Event Handlers ---
+        async function handleSendMessage() {
+            const userMessage = chatInput.value.trim();
+            if (!userMessage) return;
+
+            addMessageToChat(userMessage, 'user');
+            saveMessageToHistory(userMessage, 'user');
+
+            chatInput.value = '';
+            showTypingIndicator(chatMessages);
+            const expertResponse = await askMyApi(userMessage);
+            document.querySelector('.typing-indicator')?.parentElement.remove();
+
+            addMessageToChat(expertResponse, 'ai');
+            saveMessageToHistory(expertResponse, 'ai');
+        }
+        
+        async function handleGeneratePlan() {
+            showTypingIndicator(planContent);
+            generatePlanBtn.style.display = 'none';
+
+            if (!locationData.lat || !locationData.lon) {
+                planContent.innerHTML = `<p class="text-sm text-white/80">Location not available. Cannot generate plan.</p>`;
+                return;
+            }
+            
+            const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${locationData.lat}&longitude=${locationData.lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto`;
+            
+            try {
+                const weatherResponse = await fetch(weatherUrl);
+                if (!weatherResponse.ok) throw new Error('Failed to fetch weather forecast.');
+                const weatherData = await weatherResponse.json();
+
+                const openrouterUrl = "https://openrouter.ai/api/v1/chat/completions";
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                
+                const messages = [{ "role": "system", "content": "You are a helpful Indian farming assistant. Provide a simple, actionable, daily plan in plain English. Use provided data for hyper-local advice." }, { "role": "user", "content": `I am a farmer in ${locationData.city}, ${locationData.state}. My soil is ${JSON.stringify(soilData)}. Here is the 7-day weather forecast: ${JSON.stringify(weatherData)}. Give me a simple, actionable to-do list for today.` }];
+                const payload = { "model": "openai/gpt-4o-mini", "messages": messages };
+                const headers = { "Authorization": `Bearer ${openrouterApiKey}`, "Content-Type": "application/json" };
+
+                const aiResponse = await fetch(proxyUrl + openrouterUrl, { method: 'POST', headers: headers, body: JSON.stringify(payload) });
+                const aiResponseText = await aiResponse.text();
+
+                if (!aiResponse.ok) {
+                    if (aiResponseText.includes("corsdemo")) showAlert('cors_error_title', 'cors_error_message');
+                    throw new Error('Failed to get response from AI assistant.');
+                }
+                
+                const responseJson = JSON.parse(aiResponseText);
+                const summary = responseJson.choices[0].message.content;
+                planContent.innerHTML = `<div class="prose-ai text-sm text-white">${marked.parse(summary)}</div>`;
+
+            } catch (error) {
+                console.error("Error in handleGeneratePlan:", error);
+                planContent.innerHTML = `<p class="text-sm text-white/80">Sorry, couldn't generate a plan. Please check your connection and try again.</p>`;
+            }
+        }
+        
+        async function uploadImageForDiagnosis(base64Image) {
+            // This is a simulation of uploading the image to a backend server like the Python one you provided.
+            console.log("Simulating image upload to backend...");
+            
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    // The backend would run an ML model and return a result like this.
+                    const result = {
+                        disease: "Leaf Blight",
+                        confidence: 0.87,
+                        recommendations: [
+                            "Remove and destroy affected leaves to prevent spread.",
+                            "Apply a suitable fungicide, focusing on covering all leaf surfaces.",
+                            "Improve air circulation around the plants by pruning.",
+                            "Avoid overhead watering to keep foliage dry."
+                        ]
+                    };
+                    resolve(result);
+                }, 2500); // Simulate network and processing delay
+            });
+        }
+
+        async function handleGetDiagnosis() {
+            showTypingIndicator(diagnosisDetailsContent);
+            getDiagnosisBtn.style.display = 'none';
+            
+            const imageSrc = diagnosisImagePreview.src;
+            if (!imageSrc) {
+                diagnosisDetailsContent.innerHTML = `<p>No image found.</p>`;
+                return;
+            }
+
+            const diagnosisResult = await uploadImageForDiagnosis(imageSrc);
+
+            let recommendationsHTML = '<ul>';
+            diagnosisResult.recommendations.forEach(rec => {
+                recommendationsHTML += `<li>${rec}</li>`;
+            });
+            recommendationsHTML += '</ul>';
+
+            const resultHTML = `
+                <div class="prose-ai">
+                    <p><strong>Diagnosis:</strong> ${diagnosisResult.disease}</p>
+                    <p><strong>Confidence:</strong> ${(diagnosisResult.confidence * 100).toFixed(2)}%</p>
+                    <p><strong>Recommendations:</strong></p>
+                    ${recommendationsHTML}
+                </div>
+            `;
+
+            diagnosisDetailsContent.innerHTML = resultHTML;
+        }
+
+
+        async function handleMicClick() {
+            if (!recognition) return;
+            if (isListening) { recognition.stop(); return; }
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                hasMicPermission = true;
+                recognition.start();
+            } catch (err) { hasMicPermission = false; addMessageToChat(translations[currentLanguage]['mic_permission_denied'], 'system', true); }
+        }
+        
+        function handleLogin() {
+            const name = nameInput.value.trim();
+            if (name) {
+                isLoggedIn = true; userName = name; 
+                localStorage.setItem('krivya_userName', userName); // Save username
+                loginView.classList.add('hidden'); 
+                appContainer.style.display = 'flex'; 
+                updateUIText(currentLanguage); 
+                profileName.innerText = userName; 
+                profileInitialCircle.innerText = userName.charAt(0).toUpperCase(); 
+                loadYieldHistory();
+                loadFarmDetails();
+                loadChatHistory();
+                showModal('location-modal');
+            }
+        }
+
+        function handleLogout() {
+            isLoggedIn = false; userName = ''; nameInput.value = ''; 
+            localStorage.removeItem('krivya_userName');
+            localStorage.removeItem('krivya_yieldHistory');
+            localStorage.removeItem('krivya_farmName');
+            localStorage.removeItem('krivya_farmArea');
+            localStorage.removeItem('krivya_chatHistory');
+            appContainer.style.display = 'none'; 
+            loginView.classList.remove('hidden'); 
+            navigateTo('dashboard');
+        }
+
+        function handleLocationPermission() {
+             hideModal('location-modal');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        locationData.lat = latitude; locationData.lon = longitude;
+                        const geocode = await fetchReverseGeocode(latitude, longitude);
+                        if (geocode) { locationData.city = geocode.city; locationData.state = geocode.state; locationDisplay.innerText = `${geocode.city}, ${geocode.state}`;
+                        } else { locationDisplay.innerText = `Location: ${latitude.toFixed(2)}, ${longitude.toFixed(2)}`; }
+                        delete locationDisplay.dataset.i18nKey;
+                        continueInitialization();
+                    },
+                    (error) => {
+                        let errorMessageKey = 'location_unavailable';
+                        if (error.code === error.PERMISSION_DENIED) {
+                            showAlert('location_denied_title', 'location_denied_message');
+                            errorMessageKey = 'location_permission_denied_user';
+                        }
+                        locationDisplay.dataset.i18nKey = errorMessageKey;
+                        updateUIText(currentLanguage);
+                        continueInitialization();
+                    }
+                );
+            } else { 
+                locationDisplay.dataset.i18nKey = 'location_unavailable'; 
+                updateUIText(currentLanguage); 
+                continueInitialization(); 
+            }
+        }
+
+        if (recognition) {
+            recognition.onstart = () => { micBtn.classList.add('mic-active'); isListening = true; };
+            recognition.onresult = (event) => { chatInput.value = event.results[0][0].transcript; handleSendMessage(); };
+            recognition.onend = () => { micBtn.classList.remove('mic-active'); isListening = false; };
+            recognition.onerror = (event) => { if (!hasMicPermission) addMessageToChat(translations[currentLanguage]['mic_permission_denied'], 'system', true); isListening = false; micBtn.classList.remove('mic-active'); };
+        }
+
+        function navigateTo(viewName) {
+            views.forEach(v => document.getElementById(v).classList.add('hidden'));
+            document.getElementById(`${viewName}-view`).classList.remove('hidden');
+            navItems.forEach(item => { item.classList.toggle('active', item.dataset.view === viewName); item.classList.toggle('text-slate-500', item.dataset.view !== viewName); });
+
+            if (viewName === 'market') {
+                marketListContainer.classList.remove('hidden');
+                marketSearchResultContainer.classList.add('hidden');
+                marketSearchInput.value = '';
+            }
+        }
+        
+        function changeLanguage(lang) {
+            currentLanguage = lang;
+            updateUIText(lang);
+            hideModal('language-modal');
+            const history = JSON.parse(localStorage.getItem('krivya_chatHistory')) || [];
+            if (history.length === 0) {
+                chatMessages.innerHTML = '';
+                addMessageToChat(translations[currentLanguage]['chat_welcome'], 'ai');
+            }
+        }
+        
+        function showSoilModal() {
+            if (!soilData) return;
+            const t = (key) => translations[currentLanguage][key] || translations['en'][key];
+            document.getElementById('soil-details-content').innerHTML = `<div class="flex justify-between border-b pb-2"><span>${t('soil_type_label')}</span><span class="font-semibold">${soilData.soil_type}</span></div><div class="flex justify-between border-b pb-2"><span>${t('ph_level_label')}</span><span class="font-semibold">${soilData.ph}</span></div><div class="flex justify-between border-b pb-2"><span>${t('organic_carbon_label')}</span><span class="font-semibold">${soilData.organic_carbon_percent}%</span></div><div class="flex justify-between border-b pb-2"><span>${t('nitrogen_label')}</span><span class="font-semibold">${soilData.nitrogen}</span></div><div class="flex justify-between border-b pb-2"><span>${t('phosphorus_label')}</span><span class="font-semibold">${soilData.phosphorus}</span></div><div class="flex justify-between"><span>${t('potassium_label')}</span><span class="font-semibold">${soilData.potassium}</span></div>`;
+            showModal('soil-modal');
+        }
+
+        async function handleCalculateYield() {
+            const area = parseFloat(farmAreaInput.value);
+            const crop = cropNameInput.value.trim();
+            if (!area || area <= 0 || !crop) {
+                showAlert('ok_btn', 'Please enter a valid farm area and crop name.'); // Simple alert, can be translated
+                return;
+            }
+
+            yieldResults.innerHTML = '';
+            showTypingIndicator(yieldResults);
+
+            const marketInfo = await fetchMandiPrices(locationData.city, crop);
+
+            if (!marketInfo || !marketInfo.commodities || marketInfo.commodities.length === 0) {
+                yieldResults.innerHTML = `<p class="text-red-500">Could not fetch market price for ${crop}. Please check the spelling or try another crop.</p>`;
+                return;
+            }
+
+            const avgYields = { 'wheat': 12, 'rice': 22, 'cotton': 6, 'onion': 100, 'tomato': 150, 'sugarcane': 350, 'grapes': 80, 'maize': 25, 'soybean': 10 };
+            const cropYieldPerAcre = avgYields[crop.toLowerCase()] || 15; // Default yield
+            const price = marketInfo.commodities[0].modal_price_quintal;
+            
+            const totalYield = area * cropYieldPerAcre;
+            const estimatedRevenue = totalYield * price;
+            
+            const t = (key) => translations[currentLanguage][key] || translations['en'][key];
+            
+            yieldResults.innerHTML = `
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <h4 class="font-bold text-md mb-2">${t('yield_report_title')}</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between"><span>${t('total_yield_label')}:</span><span class="font-semibold">${totalYield.toFixed(2)} ${t('quintals_unit')}</span></div>
+                        <div class="flex justify-between"><span>${t('market_rate_label')}:</span><span class="font-semibold">₹${price.toLocaleString('en-IN')} / ${t('quintals_unit')}</span></div>
+                        <div class="flex justify-between border-t pt-2 mt-2 font-bold"><span>${t('est_revenue_label')}:</span><span>₹${estimatedRevenue.toLocaleString('en-IN')}</span></div>
+                    </div>
+                </div>
+            `;
+            
+            // Save the record
+            const newRecord = {
+                id: Date.now(),
+                crop: crop,
+                area: area,
+                totalYield: totalYield,
+                estimatedRevenue: estimatedRevenue,
+                date: new Date().toLocaleDateString('en-IN')
+            };
+            const history = JSON.parse(localStorage.getItem('krivya_yieldHistory')) || [];
+            history.unshift(newRecord); // Add to the beginning
+            localStorage.setItem('krivya_yieldHistory', JSON.stringify(history));
+            renderYieldHistory();
+        }
+
+        function renderYieldHistory() {
+            const history = JSON.parse(localStorage.getItem('krivya_yieldHistory')) || [];
+            const t = (key) => translations[currentLanguage][key] || translations['en'][key];
+            
+            if (history.length === 0) {
+                yieldHistoryList.innerHTML = `<p class="text-slate-500 text-center text-sm p-4" data-i18n-key="no_yield_records">${t('no_yield_records')}</p>`;
+                return;
+            }
+
+            yieldHistoryList.innerHTML = history.map(rec => `
+                <div class="bg-slate-50 p-3 rounded-lg border">
+                    <div class="flex justify-between items-center mb-1">
+                        <p class="font-bold">${rec.crop} (${rec.area} acres)</p>
+                        <p class="text-xs text-slate-500">${rec.date}</p>
+                    </div>
+                    <div class="text-sm flex justify-between">
+                        <span>${t('total_yield_label')}: <span class="font-medium">${rec.totalYield.toFixed(1)} ${t('quintals_unit')}</span></span>
+                        <span>${t('est_revenue_label')}: <span class="font-medium">₹${rec.estimatedRevenue.toLocaleString('en-IN')}</span></span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function loadYieldHistory() {
+            renderYieldHistory();
+        }
+
+        function handleSaveFarmDetails() {
+            const farmName = farmNameInputProfile.value.trim();
+            const farmArea = farmAreaInputProfile.value.trim();
+
+            if (farmName && farmArea) {
+                localStorage.setItem('krivya_farmName', farmName);
+                localStorage.setItem('krivya_farmArea', farmArea);
+                profileFarmName.textContent = farmName;
+                delete profileFarmName.dataset.i18nKey;
+                showAlert('details_saved_title', 'details_saved_message');
+                hideModal('farm-details-modal');
+            }
+        }
+
+        function loadFarmDetails() {
+            const savedFarmName = localStorage.getItem('krivya_farmName');
+            const savedFarmArea = localStorage.getItem('krivya_farmArea');
+
+            if (savedFarmName) {
+                profileFarmName.textContent = savedFarmName;
+                farmNameInputProfile.value = savedFarmName;
+                delete profileFarmName.dataset.i18nKey;
+            }
+            if (savedFarmArea) {
+                farmAreaInputProfile.value = savedFarmArea;
+            }
+        }
+        
+        async function handleMarketSearch() {
+            const query = marketSearchInput.value.trim();
+            if (!query) return;
+
+            marketListContainer.classList.add('hidden');
+            marketSearchResultContainer.classList.remove('hidden');
+            showTypingIndicator(marketSearchResultContainer);
+
+            const result = await fetchMandiPrices(locationData.city, query);
+            renderMarketSearchResult(result, query);
+        }
+
+        // --- Event Listeners ---
+        loginBtn.addEventListener('click', handleLogin);
+        nameInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+        logoutBtn.addEventListener('click', handleLogout);
+        sendBtn.addEventListener('click', handleSendMessage);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSendMessage(); });
+        micBtn.addEventListener('click', handleMicClick);
+        generatePlanBtn.addEventListener('click', handleGeneratePlan);
+        navItems.forEach(item => item.addEventListener('click', () => navigateTo(item.dataset.view)));
+        languageBtn.addEventListener('click', () => showModal('language-modal'));
+        langOptionBtns.forEach(btn => btn.addEventListener('click', () => changeLanguage(btn.dataset.lang)));
+        soilCard.addEventListener('click', showSoilModal);
+        farmDetailsBtn.addEventListener('click', () => showModal('farm-details-modal'));
+        notificationsBtn.addEventListener('click', () => showAlert('feature_not_implemented', 'feature_not_implemented_message'));
+        document.querySelectorAll('.modal-close-btn').forEach(btn => btn.addEventListener('click', (e) => hideModal(e.target.closest('.modal-backdrop').id)));
+        offlineToggle.addEventListener('change', (e) => isOffline = e.target.checked);
+        allowLocationBtn.addEventListener('click', handleLocationPermission);
+        denyLocationBtn.addEventListener('click', () => { hideModal('location-modal'); locationDisplay.dataset.i18nKey = 'location_permission_denied_user'; updateUIText(currentLanguage); continueInitialization(); });
+        uploadPhotoBtn.addEventListener('click', () => imageUploadInput.click());
+        imageUploadInput.addEventListener('change', (event) => { const file = event.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { diagnosisImagePreview.src = e.target.result; diagnosisDetailsContent.innerHTML = ''; getDiagnosisBtn.style.display = 'flex'; showModal('diagnosis-modal'); }; reader.readAsDataURL(file); } });
+        getDiagnosisBtn.addEventListener('click', handleGetDiagnosis);
+        calculateYieldBtn.addEventListener('click', handleCalculateYield);
+        saveFarmDetailsBtn.addEventListener('click', handleSaveFarmDetails);
+        marketSearchBtn.addEventListener('click', handleMarketSearch);
+        marketSearchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleMarketSearch(); });
+        backToMarketListBtn.addEventListener('click', () => {
+            marketSearchResultContainer.classList.add('hidden');
+            marketListContainer.classList.remove('hidden');
+            marketSearchInput.value = '';
+        });
+
+
+        async function continueInitialization() {
+            const [weatherInfo, soilInfo, marketInfo, forecastInfo] = await Promise.all([
+                fetchWeatherData(locationData.lat, locationData.lon), 
+                fetchSimulatedSoilData(locationData.lat, locationData.lon),
+                fetchMandiPrices(locationData.city),
+                fetchForecastData(locationData.lat, locationData.lon)
+            ]);
+            
+            renderForecast(forecastInfo);
+            renderMarketData(marketInfo);
+
+            let marketDataForDashboard;
+            if (marketInfo && marketInfo.commodities && marketInfo.commodities.length > 0) {
+                const primaryCommodity = marketInfo.commodities[0];
+                marketDataForDashboard = {
+                    crop: primaryCommodity.name,
+                    value: primaryCommodity.modal_price_quintal,
+                    trendKey: Math.random() > 0.5 ? 'market_trend_sample_1' : 'market_trend_sample_2' // Trend remains simulated
+                };
+            } else {
+                // Fallback to simulated data if API fails or returns no commodities
+                 marketDataForDashboard = { crop: 'Wheat', value: '2,250', trendKey: 'market_trend_sample_1' };
+            }
+
+            let humidityConditionKey = 'humidity_moderate';
+            const humidityValue = parseInt(weatherInfo.humidity);
+            if (!isNaN(humidityValue)) { if (humidityValue > 75) humidityConditionKey = 'humidity_high'; else if (humidityValue < 40) humidityConditionKey = 'humidity_low'; }
+            
+            const combinedData = { 
+                weather: { temp: weatherInfo.temp, condition: weatherInfo.condition }, 
+                humidity: { value: weatherInfo.humidity, conditionKey: humidityConditionKey }, 
+                market: marketDataForDashboard, 
+                soil: soilInfo 
+            };
+            updateDashboardData(combinedData);
+        }
+
+        
+        function initializeApp() { 
+            const savedUser = localStorage.getItem('krivya_userName');
+            if (savedUser) {
+                userName = savedUser;
+                isLoggedIn = true; 
+                loginView.classList.add('hidden'); 
+                appContainer.style.display = 'flex'; 
+                profileName.innerText = userName; 
+                profileInitialCircle.innerText = userName.charAt(0).toUpperCase(); 
+                loadYieldHistory();
+                loadFarmDetails();
+                loadChatHistory();
+                showModal('location-modal');
+            }
+            updateUIText(currentLanguage); 
+        }
+        initializeApp();
+    });
+</script>
+
+</body>
+</html>
+
